@@ -10,257 +10,60 @@
 body{
   margin:0;
   display:flex;
-  font-family:Arial;
+  font-family:Arial, sans-serif;
+  height:100vh;
 }
 
-#left{
-  width:75%;
-  height:100vh;
+/* LEFT: PDF */
+#pdfSection{
+  width:65%;
   overflow-y:scroll;
-  background:#f2f2f2;
+  background:#f5f5f5;
   padding:10px;
 }
 
-#right{
-  width:25%;
-  height:100vh;
-  overflow-y:auto;
+/* CENTER: Answer Panel */
+#answerSection{
+  width:15%;
   border-left:2px solid #ccc;
+  border-right:2px solid #ccc;
   padding:10px;
-  background:white;
-}
-
-canvas{
-  margin-bottom:20px;
-  display:block;
-}
-
-.palette button{
-  width:40px;
-  height:40px;
-  margin:3px;
-  cursor:pointer;
-}
-
-.active{
-  background:#4CAF50;
-  color:white;
-}
-
-.controls{
-  margin-bottom:10px;
-}
-</style>
-</head>
-
-<body>
-
-<div id="left">
-  <div class="controls">
-    <input type="file" id="pdfUpload">
-    <button onclick="zoomIn()">Zoom +</button>
-    <button onclick="zoomOut()">Zoom -</button>
-  </div>
-  <div id="pdfContainer"></div>
-</div>
-
-<div id="right">
-  <h3>Question Palette</h3>
-  <div class="palette" id="palette"></div>
-  <br>
-  <button onclick="prevQuestion()">Previous</button>
-  <button onclick="nextQuestion()">Next</button>
-</div>
-
-<script>
-
-let pdfDoc = null;
-let scale = 1.2;
-let currentQuestion = 1;
-let totalQuestions = 75;  // You can change this
-let questionToPageMap = {};
-
-const pdfUpload = document.getElementById("pdfUpload");
-const pdfContainer = document.getElementById("pdfContainer");
-const paletteDiv = document.getElementById("palette");
-
-
-// ==========================
-// Generate Question Palette
-// ==========================
-for(let i=1;i<=totalQuestions;i++){
-  let btn = document.createElement("button");
-  btn.innerText = i;
-  btn.onclick = () => goToQuestion(i);
-  btn.id = "q"+i;
-  paletteDiv.appendChild(btn);
-}
-
-
-// ==========================
-// Load PDF
-// ==========================
-pdfUpload.addEventListener("change", function(e){
-
-  const file = e.target.files[0];
-  const reader = new FileReader();
-
-  reader.onload = function(){
-    const typedarray = new Uint8Array(this.result);
-
-    pdfjsLib.getDocument(typedarray).promise.then(function(pdf){
-      pdfDoc = pdf;
-      renderAllPages();
-      mapQuestionsToPages();
-    });
-  };
-
-  reader.readAsArrayBuffer(file);
-});
-
-
-// ==========================
-// Render All Pages
-// ==========================
-function renderAllPages(){
-
-  pdfContainer.innerHTML = "";
-
-  for(let i=1;i<=pdfDoc.numPages;i++){
-
-    pdfDoc.getPage(i).then(function(page){
-
-      let viewport = page.getViewport({scale:scale});
-      let canvas = document.createElement("canvas");
-      let context = canvas.getContext("2d");
-
-      canvas.height = viewport.height;
-      canvas.width = viewport.width;
-      canvas.id = "page"+page.pageNumber;
-
-      pdfContainer.appendChild(canvas);
-
-      page.render({
-        canvasContext:context,
-        viewport:viewport
-      });
-
-    });
-  }
-}
-
-
-// ==========================
-// Question → Page Mapping
-// ==========================
-// Simple equal distribution logic
-function mapQuestionsToPages(){
-
-  let questionsPerPage = Math.ceil(totalQuestions / pdfDoc.numPages);
-
-  for(let i=1;i<=totalQuestions;i++){
-    questionToPageMap[i] = Math.ceil(i / questionsPerPage);
-  }
-}
-
-
-// ==========================
-// Go To Question
-// ==========================
-function goToQuestion(q){
-
-  currentQuestion = q;
-
-  document.querySelectorAll(".palette button").forEach(btn=>{
-    btn.classList.remove("active");
-  });
-
-  document.getElementById("q"+q).classList.add("active");
-
-  let pageNumber = questionToPageMap[q];
-  let pageCanvas = document.getElementById("page"+pageNumber);
-
-  pageCanvas.scrollIntoView({
-    behavior:"smooth"
-  });
-}
-
-
-// ==========================
-// Navigation
-// ==========================
-function nextQuestion(){
-  if(currentQuestion < totalQuestions){
-    goToQuestion(currentQuestion + 1);
-  }
-}
-
-function prevQuestion(){
-  if(currentQuestion > 1){
-    goToQuestion(currentQuestion - 1);
-  }
-}
-
-
-// ==========================
-// Zoom
-// ==========================
-function zoomIn(){
-  scale += 0.2;
-  renderAllPages();
-}
-
-function zoomOut(){
-  if(scale > 0.4){
-    scale -= 0.2;
-    renderAllPages();
-  }
-}
-
-</script>
-
-</body>
-</html><!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>CBT Prototype</title>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-
-<style>
-body{
-  margin:0;
   display:flex;
-  font-family:Arial;
+  flex-direction:column;
+  justify-content:flex-start;
 }
 
-#left{
-  width:75%;
-  height:100vh;
-  overflow-y:scroll;
-  background:#f2f2f2;
-  padding:10px;
-}
-
-#right{
-  width:25%;
-  height:100vh;
+/* RIGHT: Question Palette */
+#paletteSection{
+  width:20%;
   overflow-y:auto;
-  border-left:2px solid #ccc;
   padding:10px;
-  background:white;
 }
 
 canvas{
-  margin-bottom:20px;
   display:block;
+  margin-bottom:20px;
+}
+
+/* Option buttons */
+.optionBtn{
+  width:100%;
+  margin-bottom:8px;
+  padding:8px;
+  cursor:pointer;
+}
+
+.navBtn{
+  width:100%;
+  margin-top:10px;
+  padding:8px;
+  cursor:pointer;
 }
 
 .palette button{
   width:40px;
   height:40px;
-  margin:3px;
+  margin:4px;
   cursor:pointer;
 }
 
@@ -269,29 +72,42 @@ canvas{
   color:white;
 }
 
-.controls{
-  margin-bottom:10px;
+.review{
+  background:orange !important;
+  color:white;
 }
 </style>
 </head>
 
 <body>
 
-<div id="left">
-  <div class="controls">
-    <input type="file" id="pdfUpload">
-    <button onclick="zoomIn()">Zoom +</button>
-    <button onclick="zoomOut()">Zoom -</button>
-  </div>
+<!-- LEFT -->
+<div id="pdfSection">
+  <input type="file" id="pdfUpload"><br><br>
   <div id="pdfContainer"></div>
 </div>
 
-<div id="right">
+<!-- CENTER -->
+<div id="answerSection">
+  <h3>Options</h3>
+
+  <button class="optionBtn" onclick="selectOption('A')">A</button>
+  <button class="optionBtn" onclick="selectOption('B')">B</button>
+  <button class="optionBtn" onclick="selectOption('C')">C</button>
+  <button class="optionBtn" onclick="selectOption('D')">D</button>
+  <button class="optionBtn" onclick="selectOption('E')">E</button>
+
+  <button class="navBtn" onclick="clearResponse()">Clear Response</button>
+  <button class="navBtn" onclick="markForReview()">Mark For Review</button>
+
+  <button class="navBtn" onclick="prevQuestion()">Previous</button>
+  <button class="navBtn" onclick="nextQuestion()">Next</button>
+</div>
+
+<!-- RIGHT -->
+<div id="paletteSection">
   <h3>Question Palette</h3>
   <div class="palette" id="palette"></div>
-  <br>
-  <button onclick="prevQuestion()">Previous</button>
-  <button onclick="nextQuestion()">Next</button>
 </div>
 
 <script>
@@ -299,17 +115,17 @@ canvas{
 let pdfDoc = null;
 let scale = 1.2;
 let currentQuestion = 1;
-let totalQuestions = 75;  // You can change this
+let totalQuestions = 75;
+
 let questionToPageMap = {};
+let answers = {};
+let reviewMarked = {};
 
 const pdfUpload = document.getElementById("pdfUpload");
 const pdfContainer = document.getElementById("pdfContainer");
 const paletteDiv = document.getElementById("palette");
 
-
-// ==========================
-// Generate Question Palette
-// ==========================
+/* Generate Palette */
 for(let i=1;i<=totalQuestions;i++){
   let btn = document.createElement("button");
   btn.innerText = i;
@@ -318,12 +134,8 @@ for(let i=1;i<=totalQuestions;i++){
   paletteDiv.appendChild(btn);
 }
 
-
-// ==========================
-// Load PDF
-// ==========================
+/* Load PDF */
 pdfUpload.addEventListener("change", function(e){
-
   const file = e.target.files[0];
   const reader = new FileReader();
 
@@ -340,18 +152,12 @@ pdfUpload.addEventListener("change", function(e){
   reader.readAsArrayBuffer(file);
 });
 
-
-// ==========================
-// Render All Pages
-// ==========================
+/* Render PDF */
 function renderAllPages(){
-
   pdfContainer.innerHTML = "";
 
   for(let i=1;i<=pdfDoc.numPages;i++){
-
     pdfDoc.getPage(i).then(function(page){
-
       let viewport = page.getViewport({scale:scale});
       let canvas = document.createElement("canvas");
       let context = canvas.getContext("2d");
@@ -366,77 +172,65 @@ function renderAllPages(){
         canvasContext:context,
         viewport:viewport
       });
-
     });
   }
 }
 
-
-// ==========================
-// Question → Page Mapping
-// ==========================
-// Simple equal distribution logic
+/* Map Questions */
 function mapQuestionsToPages(){
-
   let questionsPerPage = Math.ceil(totalQuestions / pdfDoc.numPages);
-
   for(let i=1;i<=totalQuestions;i++){
     questionToPageMap[i] = Math.ceil(i / questionsPerPage);
   }
 }
 
-
-// ==========================
-// Go To Question
-// ==========================
+/* Navigation */
 function goToQuestion(q){
-
   currentQuestion = q;
 
   document.querySelectorAll(".palette button").forEach(btn=>{
     btn.classList.remove("active");
   });
 
-  document.getElementById("q"+q).classList.add("active");
+  let btn = document.getElementById("q"+q);
+  btn.classList.add("active");
 
   let pageNumber = questionToPageMap[q];
-  let pageCanvas = document.getElementById("page"+pageNumber);
-
-  pageCanvas.scrollIntoView({
-    behavior:"smooth"
-  });
+  document.getElementById("page"+pageNumber)
+          .scrollIntoView({behavior:"smooth"});
 }
 
-
-// ==========================
-// Navigation
-// ==========================
 function nextQuestion(){
-  if(currentQuestion < totalQuestions){
-    goToQuestion(currentQuestion + 1);
-  }
+  if(currentQuestion < totalQuestions)
+    goToQuestion(currentQuestion+1);
 }
 
 function prevQuestion(){
-  if(currentQuestion > 1){
-    goToQuestion(currentQuestion - 1);
-  }
+  if(currentQuestion > 1)
+    goToQuestion(currentQuestion-1);
 }
 
-
-// ==========================
-// Zoom
-// ==========================
-function zoomIn(){
-  scale += 0.2;
-  renderAllPages();
+/* Option Selection */
+function selectOption(opt){
+  answers[currentQuestion] = opt;
+  let btn = document.getElementById("q"+currentQuestion);
+  btn.style.background = "#2196F3";
+  btn.style.color = "white";
 }
 
-function zoomOut(){
-  if(scale > 0.4){
-    scale -= 0.2;
-    renderAllPages();
-  }
+/* Clear */
+function clearResponse(){
+  delete answers[currentQuestion];
+  let btn = document.getElementById("q"+currentQuestion);
+  btn.style.background = "";
+  btn.style.color = "";
+}
+
+/* Mark for Review */
+function markForReview(){
+  reviewMarked[currentQuestion] = true;
+  let btn = document.getElementById("q"+currentQuestion);
+  btn.classList.add("review");
 }
 
 </script>
