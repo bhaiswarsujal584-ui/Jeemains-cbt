@@ -1,328 +1,445 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>JEE Main CBT Simulator</title>
-<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@2.16.105/build/pdf.min.js"></script>
-<style>
-body { margin:0; font-family:Arial; display:flex; height:100vh; }
-#left { width:50%; overflow:auto; background:#f2f2f2; text-align:center; }
-#right { width:50%; padding:10px; overflow:auto; }
+<meta charset="UTF-8">
+<title>CBT Prototype</title>
 
-.palette button{
-  width:35px;height:35px;margin:3px;border:none;color:white;font-weight:bold;
-  border-radius:4px;
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+
+<style>
+body{
+  margin:0;
+  display:flex;
+  font-family:Arial;
 }
 
-.notVisited{background:#bdbdbd;}
-.answered{background:#4caf50;}
-.visited{background:#e91e63;}
-.review{background:#9c27b0;}
+#left{
+  width:75%;
+  height:100vh;
+  overflow-y:scroll;
+  background:#f2f2f2;
+  padding:10px;
+}
 
-.timer{font-size:18px;font-weight:bold;margin-bottom:10px;}
-select, input{margin:5px;}
-button{margin:3px;}
+#right{
+  width:25%;
+  height:100vh;
+  overflow-y:auto;
+  border-left:2px solid #ccc;
+  padding:10px;
+  background:white;
+}
+
+canvas{
+  margin-bottom:20px;
+  display:block;
+}
+
+.palette button{
+  width:40px;
+  height:40px;
+  margin:3px;
+  cursor:pointer;
+}
+
+.active{
+  background:#4CAF50;
+  color:white;
+}
+
+.controls{
+  margin-bottom:10px;
+}
 </style>
 </head>
 
 <body>
 
 <div id="left">
-<h3>Upload Question PDF</h3>
-<input type="file" id="pdfUpload"><br>
-<button onclick="zoomIn()">Zoom +</button>
-<button onclick="zoomOut()">Zoom -</button>
-<br><br>
-<canvas id="pdfCanvas"></canvas>
+  <div class="controls">
+    <input type="file" id="pdfUpload">
+    <button onclick="zoomIn()">Zoom +</button>
+    <button onclick="zoomOut()">Zoom -</button>
+  </div>
+  <div id="pdfContainer"></div>
 </div>
 
 <div id="right">
-
-<h3>Pre-Test Configuration</h3>
-
-Subject Order:
-<br>
-1st:
-<select id="sub1">
-<option>Physics</option>
-<option>Chemistry</option>
-<option>Mathematics</option>
-</select>
-
-2nd:
-<select id="sub2">
-<option>Physics</option>
-<option>Chemistry</option>
-<option>Mathematics</option>
-</select>
-
-3rd:
-<select id="sub3">
-<option>Physics</option>
-<option>Chemistry</option>
-<option>Mathematics</option>
-</select>
-
-<br><br>
-
-Physics Marks:
-+ <input type="number" id="phyPos" value="4" style="width:50px">
-- <input type="number" id="phyNeg" value="-1" style="width:50px">
-
-<br>
-
-Chemistry Marks:
-+ <input type="number" id="chemPos" value="4" style="width:50px">
-- <input type="number" id="chemNeg" value="-1" style="width:50px">
-
-<br>
-
-Mathematics Marks:
-+ <input type="number" id="mathPos" value="4" style="width:50px">
-- <input type="number" id="mathNeg" value="-1" style="width:50px">
-
-<br><br>
-
-<textarea id="answerKey" rows="5" cols="40" placeholder="Paste answer key like:
-1A
-2C
-21 5
-..."></textarea>
-
-<br>
-<button onclick="startTest()">Start Test</button>
-
-<hr>
-
-<div class="timer">
-Main Timer: <span id="mainTimer">03:00:00</span><br>
-Question Stopwatch: <span id="questionTimer">00:00</span>
-</div>
-
-<div id="questionArea"></div>
-
-<div>
-<button onclick="prevQ()">Previous</button>
-<button onclick="nextQ()">Next</button>
-<button onclick="markReview()">Mark Review</button>
-<button onclick="clearResponse()">Clear</button>
-<button onclick="submitTest()">Submit</button>
-</div>
-
-<h3>Palette</h3>
-<div class="palette" id="palette"></div>
-
-<div id="result"></div>
-
+  <h3>Question Palette</h3>
+  <div class="palette" id="palette"></div>
+  <br>
+  <button onclick="prevQuestion()">Previous</button>
+  <button onclick="nextQuestion()">Next</button>
 </div>
 
 <script>
 
-let pdfDoc=null,pageNum=1,scale=1.2;
-let currentQ=1,totalQuestions=75;
-let answers={},status={},timeSpent={};
-let questionStart;
-let mainTime=10800,mainInterval;
-let keyMap={};
-let subjectMap={};
+let pdfDoc = null;
+let scale = 1.2;
+let currentQuestion = 1;
+let totalQuestions = 75;  // You can change this
+let questionToPageMap = {};
 
-document.getElementById("pdfUpload").addEventListener("change",function(e){
- let file=e.target.files[0];
- let reader=new FileReader();
- reader.onload=function(){
-  let typedarray=new Uint8Array(this.result);
-  pdfjsLib.getDocument(typedarray).promise.then(function(pdf){
-   pdfDoc=pdf;
-   renderALLPage();
-  });
- };
- reader.readAsArrayBuffer(file);
+const pdfUpload = document.getElementById("pdfUpload");
+const pdfContainer = document.getElementById("pdfContainer");
+const paletteDiv = document.getElementById("palette");
+
+
+// ==========================
+// Generate Question Palette
+// ==========================
+for(let i=1;i<=totalQuestions;i++){
+  let btn = document.createElement("button");
+  btn.innerText = i;
+  btn.onclick = () => goToQuestion(i);
+  btn.id = "q"+i;
+  paletteDiv.appendChild(btn);
+}
+
+
+// ==========================
+// Load PDF
+// ==========================
+pdfUpload.addEventListener("change", function(e){
+
+  const file = e.target.files[0];
+  const reader = new FileReader();
+
+  reader.onload = function(){
+    const typedarray = new Uint8Array(this.result);
+
+    pdfjsLib.getDocument(typedarray).promise.then(function(pdf){
+      pdfDoc = pdf;
+      renderAllPages();
+      mapQuestionsToPages();
+    });
+  };
+
+  reader.readAsArrayBuffer(file);
 });
 
-function renderALLPage(){
- pdfDoc.getPage(num).then(function(page){
-  let viewport=page.getViewport({scale:scale});
-  let canvas=document.getElementById('pdfCanvas');
-  let context=canvas.getContext('2d');
-  canvas.height=viewport.height;
-  canvas.width=viewport.width;
-  page.render({canvasContext:context,viewport:viewport});
- });
-}
 
-function zoomIn(){scale+=0.2;renderPage(pageNum);}
-function zoomOut(){scale-=0.2;renderPage(pageNum);}
+// ==========================
+// Render All Pages
+// ==========================
+function renderAllPages(){
 
-function autoScroll(){
- pageNum=Math.ceil(currentQ/5);
- if(pdfDoc && pageNum<=pdfDoc.numPages) renderPage(pageNum);
-}
+  pdfContainer.innerHTML = "";
 
-function buildPalette(){
- let p=document.getElementById("palette");
- p.innerHTML="";
- for(let i=1;i<=75;i++){
-  let btn=document.createElement("button");
-  btn.innerText=i;
-  btn.className="notVisited";
-  btn.onclick=()=>gotoQ(i);
-  p.appendChild(btn);
-  status[i]="notVisited";
- }
-}
+  for(let i=1;i<=pdfDoc.numPages;i++){
 
-function updatePalette(){
- let buttons=document.querySelectorAll(".palette button");
- buttons.forEach((b,i)=>{
-  b.className=status[i+1];
- });
-}
+    pdfDoc.getPage(i).then(function(page){
 
-function gotoQ(n){
- saveTime();
- currentQ=n;
- loadQuestion();
-}
+      let viewport = page.getViewport({scale:scale});
+      let canvas = document.createElement("canvas");
+      let context = canvas.getContext("2d");
 
-function loadQuestion(){
- questionStart=Date.now();
- document.getElementById("questionArea").innerHTML="";
- let area=document.getElementById("questionArea");
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+      canvas.id = "page"+page.pageNumber;
 
- let sectionIndex=Math.ceil(currentQ/25);
- let qInSection=((currentQ-1)%25)+1;
+      pdfContainer.appendChild(canvas);
 
- let div=document.createElement("div");
- div.innerHTML="<h3>Question "+currentQ+"</h3>";
- area.appendChild(div);
+      page.render({
+        canvasContext:context,
+        viewport:viewport
+      });
 
- if(qInSection<=20){
-  ["A","B","C","D"].forEach(opt=>{
-   let radio=document.createElement("input");
-   radio.type="radio";
-   radio.name="opt";
-   radio.value=opt;
-   if(answers[currentQ]==opt) radio.checked=true;
-   radio.onchange=()=>{answers[currentQ]=opt;status[currentQ]="answered";updatePalette();}
-   area.appendChild(radio);
-   area.append(opt);
-   area.appendChild(document.createElement("br"));
-  });
- }else{
-  let input=document.createElement("input");
-  input.type="number";
-  input.value=answers[currentQ]||"";
-  input.onchange=()=>{answers[currentQ]=input.value;status[currentQ]="answered";updatePalette();}
-  area.appendChild(input);
- }
-
- if(status[currentQ]=="notVisited") status[currentQ]="visited";
- updatePalette();
- autoScroll();
-}
-
-function prevQ(){if(currentQ>1){saveTime();currentQ--;loadQuestion();}}
-function nextQ(){if(currentQ<75){saveTime();currentQ++;loadQuestion();}}
-
-function markReview(){status[currentQ]="review";updatePalette();}
-function clearResponse(){delete answers[currentQ];status[currentQ]="visited";updatePalette();loadQuestion();}
-
-function saveTime(){
- let diff=Math.floor((Date.now()-questionStart)/1000);
- timeSpent[currentQ]=(timeSpent[currentQ]||0)+diff;
-}
-
-function startMainTimer(){
- mainInterval=setInterval(()=>{
-  mainTime--;
-  let h=Math.floor(mainTime/3600);
-  let m=Math.floor((mainTime%3600)/60);
-  let s=mainTime%60;
-  document.getElementById("mainTimer").innerText=
-   String(h).padStart(2,'0')+":"+
-   String(m).padStart(2,'0')+":"+
-   String(s).padStart(2,'0');
-  if(mainTime<=0){submitTest();}
- },1000);
-}
-
-function startStopwatch(){
- setInterval(()=>{
-  let diff=Math.floor((Date.now()-questionStart)/1000);
-  document.getElementById("questionTimer").innerText=
-   String(Math.floor(diff/60)).padStart(2,'0')+":"+
-   String(diff%60).padStart(2,'0');
- },1000);
-}
-
-function parseKey(){
- let lines=document.getElementById("answerKey").value.split("\n");
- lines.forEach(l=>{
-  let parts=l.trim().split(/[\s]+/);
-  if(parts.length==2) keyMap[parts[0]]=parts[1];
- });
-}
-
-function calculateScore(){
- let total=0;
- let breakdown="";
- for(let i=1;i<=75;i++){
-  let section=Math.ceil(i/25);
-  let subject=getSubject(section);
-
-  let pos=parseInt(document.getElementById(subject+"Pos").value);
-  let neg=parseInt(document.getElementById(subject+"Neg").value);
-
-  let correct=keyMap[i];
-  if(!answers[i]) continue;
-
-  if(String(answers[i])===String(correct)){
-   total+=pos;
-  }else{
-   total+=neg;
+    });
   }
- }
-
- breakdown+="Total Score: "+total+"<br><br>";
- breakdown+="Time Spent Per Question:<br>";
- for(let i=1;i<=75;i++){
-  breakdown+="Q"+i+": "+(timeSpent[i]||0)+" sec<br>";
- }
-
- document.getElementById("result").innerHTML=breakdown;
 }
 
-function getSubject(section){
- let s1=document.getElementById("sub1").value;
- let s2=document.getElementById("sub2").value;
- let s3=document.getElementById("sub3").value;
- if(section==1) return s1.toLowerCase();
- if(section==2) return s2.toLowerCase();
- if(section==3) return s3.toLowerCase();
+
+// ==========================
+// Question → Page Mapping
+// ==========================
+// Simple equal distribution logic
+function mapQuestionsToPages(){
+
+  let questionsPerPage = Math.ceil(totalQuestions / pdfDoc.numPages);
+
+  for(let i=1;i<=totalQuestions;i++){
+    questionToPageMap[i] = Math.ceil(i / questionsPerPage);
+  }
 }
 
-function startTest(){
- if(new Set([sub1.value,sub2.value,sub3.value]).size!=3){
-  alert("Subjects must be unique");
-  return;
- }
- parseKey();
- buildPalette();
- loadQuestion();
- startMainTimer();
- startStopwatch();
+
+// ==========================
+// Go To Question
+// ==========================
+function goToQuestion(q){
+
+  currentQuestion = q;
+
+  document.querySelectorAll(".palette button").forEach(btn=>{
+    btn.classList.remove("active");
+  });
+
+  document.getElementById("q"+q).classList.add("active");
+
+  let pageNumber = questionToPageMap[q];
+  let pageCanvas = document.getElementById("page"+pageNumber);
+
+  pageCanvas.scrollIntoView({
+    behavior:"smooth"
+  });
 }
 
-function submitTest(){
- saveTime();
- clearInterval(mainInterval);
- calculateScore();
+
+// ==========================
+// Navigation
+// ==========================
+function nextQuestion(){
+  if(currentQuestion < totalQuestions){
+    goToQuestion(currentQuestion + 1);
+  }
+}
+
+function prevQuestion(){
+  if(currentQuestion > 1){
+    goToQuestion(currentQuestion - 1);
+  }
+}
+
+
+// ==========================
+// Zoom
+// ==========================
+function zoomIn(){
+  scale += 0.2;
+  renderAllPages();
+}
+
+function zoomOut(){
+  if(scale > 0.4){
+    scale -= 0.2;
+    renderAllPages();
+  }
 }
 
 </script>
+
 </body>
+</html><!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>CBT Prototype</title>
 
-</html>   
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+
+<style>
+body{
+  margin:0;
+  display:flex;
+  font-family:Arial;
+}
+
+#left{
+  width:75%;
+  height:100vh;
+  overflow-y:scroll;
+  background:#f2f2f2;
+  padding:10px;
+}
+
+#right{
+  width:25%;
+  height:100vh;
+  overflow-y:auto;
+  border-left:2px solid #ccc;
+  padding:10px;
+  background:white;
+}
+
+canvas{
+  margin-bottom:20px;
+  display:block;
+}
+
+.palette button{
+  width:40px;
+  height:40px;
+  margin:3px;
+  cursor:pointer;
+}
+
+.active{
+  background:#4CAF50;
+  color:white;
+}
+
+.controls{
+  margin-bottom:10px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="left">
+  <div class="controls">
+    <input type="file" id="pdfUpload">
+    <button onclick="zoomIn()">Zoom +</button>
+    <button onclick="zoomOut()">Zoom -</button>
+  </div>
+  <div id="pdfContainer"></div>
+</div>
+
+<div id="right">
+  <h3>Question Palette</h3>
+  <div class="palette" id="palette"></div>
+  <br>
+  <button onclick="prevQuestion()">Previous</button>
+  <button onclick="nextQuestion()">Next</button>
+</div>
+
+<script>
+
+let pdfDoc = null;
+let scale = 1.2;
+let currentQuestion = 1;
+let totalQuestions = 75;  // You can change this
+let questionToPageMap = {};
+
+const pdfUpload = document.getElementById("pdfUpload");
+const pdfContainer = document.getElementById("pdfContainer");
+const paletteDiv = document.getElementById("palette");
 
 
+// ==========================
+// Generate Question Palette
+// ==========================
+for(let i=1;i<=totalQuestions;i++){
+  let btn = document.createElement("button");
+  btn.innerText = i;
+  btn.onclick = () => goToQuestion(i);
+  btn.id = "q"+i;
+  paletteDiv.appendChild(btn);
+}
 
 
+// ==========================
+// Load PDF
+// ==========================
+pdfUpload.addEventListener("change", function(e){
+
+  const file = e.target.files[0];
+  const reader = new FileReader();
+
+  reader.onload = function(){
+    const typedarray = new Uint8Array(this.result);
+
+    pdfjsLib.getDocument(typedarray).promise.then(function(pdf){
+      pdfDoc = pdf;
+      renderAllPages();
+      mapQuestionsToPages();
+    });
+  };
+
+  reader.readAsArrayBuffer(file);
+});
+
+
+// ==========================
+// Render All Pages
+// ==========================
+function renderAllPages(){
+
+  pdfContainer.innerHTML = "";
+
+  for(let i=1;i<=pdfDoc.numPages;i++){
+
+    pdfDoc.getPage(i).then(function(page){
+
+      let viewport = page.getViewport({scale:scale});
+      let canvas = document.createElement("canvas");
+      let context = canvas.getContext("2d");
+
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+      canvas.id = "page"+page.pageNumber;
+
+      pdfContainer.appendChild(canvas);
+
+      page.render({
+        canvasContext:context,
+        viewport:viewport
+      });
+
+    });
+  }
+}
+
+
+// ==========================
+// Question → Page Mapping
+// ==========================
+// Simple equal distribution logic
+function mapQuestionsToPages(){
+
+  let questionsPerPage = Math.ceil(totalQuestions / pdfDoc.numPages);
+
+  for(let i=1;i<=totalQuestions;i++){
+    questionToPageMap[i] = Math.ceil(i / questionsPerPage);
+  }
+}
+
+
+// ==========================
+// Go To Question
+// ==========================
+function goToQuestion(q){
+
+  currentQuestion = q;
+
+  document.querySelectorAll(".palette button").forEach(btn=>{
+    btn.classList.remove("active");
+  });
+
+  document.getElementById("q"+q).classList.add("active");
+
+  let pageNumber = questionToPageMap[q];
+  let pageCanvas = document.getElementById("page"+pageNumber);
+
+  pageCanvas.scrollIntoView({
+    behavior:"smooth"
+  });
+}
+
+
+// ==========================
+// Navigation
+// ==========================
+function nextQuestion(){
+  if(currentQuestion < totalQuestions){
+    goToQuestion(currentQuestion + 1);
+  }
+}
+
+function prevQuestion(){
+  if(currentQuestion > 1){
+    goToQuestion(currentQuestion - 1);
+  }
+}
+
+
+// ==========================
+// Zoom
+// ==========================
+function zoomIn(){
+  scale += 0.2;
+  renderAllPages();
+}
+
+function zoomOut(){
+  if(scale > 0.4){
+    scale -= 0.2;
+    renderAllPages();
+  }
+}
+
+</script>
+
+</body>
+</html>
